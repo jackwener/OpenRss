@@ -4,6 +4,7 @@ pub mod config;
 pub mod data;
 pub mod error;
 pub mod feed;
+pub mod http;
 pub mod middleware;
 pub mod registry;
 pub mod routes;

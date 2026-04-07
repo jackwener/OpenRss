@@ -15,6 +15,7 @@ use crate::error::AppError;
 pub struct AppState {
     pub config: Arc<crate::config::Config>,
     pub cache: Arc<dyn crate::cache::CacheBackend>,
+    pub http: crate::http::client::HttpClient,
 }
 
 /// Type alias for route handler functions.
@@ -88,5 +89,25 @@ mod tests {
 
         assert_eq!(route.path, "/test/example");
         assert_eq!(route.name, "test/example");
+    }
+
+    #[test]
+    fn app_state_has_http_client() {
+        let config = crate::config::Config {
+            port: 0,
+            cache_expire: 300,
+            cache_type: crate::config::CacheType::Memory,
+            redis_url: None,
+            access_key: None,
+            request_timeout: 30,
+            item_limit: 50,
+        };
+        let cache = Arc::new(crate::cache::memory::MemoryCache::new(100, 300));
+        let http = crate::http::client::HttpClient::new(&config);
+        let _state = AppState {
+            config: Arc::new(config),
+            cache,
+            http,
+        };
     }
 }

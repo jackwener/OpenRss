@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::cache::memory::MemoryCache;
 use crate::config::Config;
+use crate::http::client::HttpClient;
 use crate::middleware::{cache::CacheState, header, template};
 use crate::registry::{self, AppState};
 use crate::routes;
@@ -12,9 +13,12 @@ pub fn build_app(config: &Config) -> Router {
     let cache_backend = Arc::new(MemoryCache::new(1000, config.cache_expire));
     let config = Arc::new(config.clone());
 
+    let http_client = HttpClient::new(&config);
+
     let app_state = Arc::new(AppState {
         config: config.clone(),
         cache: cache_backend.clone(),
+        http: http_client,
     });
 
     let cache_state = Arc::new(CacheState {
@@ -28,6 +32,7 @@ pub fn build_app(config: &Config) -> Router {
         .route("/healthz", get(healthz));
 
     let app = registry::register_routes(app, routes::test::routes());
+    let app = registry::register_routes(app, routes::hackernews::routes());
 
     // Middleware stack — last .layer() = outermost (runs first for request).
     //

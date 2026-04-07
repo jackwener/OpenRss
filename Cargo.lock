@@ -1405,6 +1405,7 @@ dependencies = [
  "axum-test",
  "chrono",
  "dotenvy",
+ "futures",
  "md-5",
  "moka",
  "pretty_assertions",

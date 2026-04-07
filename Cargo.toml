@@ -57,6 +57,9 @@ md-5 = "0.10"
 # URL encoding (query param parsing)
 urlencoding = "2"
 
+# Async utilities (concurrent futures)
+futures = "0.3"
+
 [dev-dependencies]
 axum-test = "20"
 wiremock = "0.6"
