@@ -39,8 +39,10 @@ pub async fn access_control(
     let query = request.uri().query().unwrap_or("");
     let find_param = |name: &str| -> Option<String> {
         for pair in query.split('&') {
-            if let Some(val) = pair.strip_prefix(name).and_then(|s| s.strip_prefix('=')) {
-                return Some(urlencoding::decode(val).unwrap_or_default().to_string());
+            if let Some((k, v)) = pair.split_once('=') {
+                if k == name {
+                    return Some(urlencoding::decode(v).unwrap_or_default().to_string());
+                }
             }
         }
         None

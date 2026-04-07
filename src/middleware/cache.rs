@@ -34,7 +34,11 @@ pub async fn cache_middleware(
 
     let cache_key = compute_cache_key(request.uri());
 
-    // Check cache (unless no-cache)
+    // Check cache (unless no-cache).
+    // On HIT, we return early WITHOUT calling next.run() — this skips the handler.
+    // Because cache is the innermost middleware, no other middleware is skipped.
+    // The returned response carries Data in extensions, so outer middleware
+    // (parameter, template, header) still process it normally.
     if !skip_cache {
         if let Some(cached) = state.backend.get(&cache_key).await {
             if let Ok(data) = serde_json::from_str::<Data>(&cached) {

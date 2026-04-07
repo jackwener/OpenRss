@@ -65,57 +65,62 @@ pub fn apply_filters(data: &mut Data, params: &FilterParams) {
         });
     }
 
-    // filter_title: include items matching title regex
-    if let Some(ref pattern) = params.filter_title {
-        if let Some(re) = build_regex(pattern, case_sensitive) {
-            data.items.retain(|item| re.is_match(&item.title));
+    // Unified filter/filterout take priority over individual field filters (RSSHub behavior).
+    if params.filter.is_some() || params.filterout.is_some() {
+        // filter: include items matching ANY of title/description/author/category
+        if let Some(ref pattern) = params.filter {
+            if let Some(re) = build_regex(pattern, case_sensitive) {
+                data.items.retain(|item| {
+                    re.is_match(&item.title)
+                        || item.description.as_ref().map_or(false, |d| re.is_match(d))
+                        || item.author.as_ref().map_or(false, |a| re.is_match(a))
+                        || item.category.iter().any(|c| re.is_match(c))
+                });
+            }
         }
-    }
 
-    // filterout_title: exclude items matching title regex
-    if let Some(ref pattern) = params.filterout_title {
-        if let Some(re) = build_regex(pattern, case_sensitive) {
-            data.items.retain(|item| !re.is_match(&item.title));
+        // filterout: exclude items matching ANY of title/description/author/category
+        if let Some(ref pattern) = params.filterout {
+            if let Some(re) = build_regex(pattern, case_sensitive) {
+                data.items.retain(|item| {
+                    !(re.is_match(&item.title)
+                        || item.description.as_ref().map_or(false, |d| re.is_match(d))
+                        || item.author.as_ref().map_or(false, |a| re.is_match(a))
+                        || item.category.iter().any(|c| re.is_match(c)))
+                });
+            }
         }
-    }
+    } else {
+        // Individual field filters (only when unified filter is not set)
 
-    // filter_description: include items matching description regex
-    if let Some(ref pattern) = params.filter_description {
-        if let Some(re) = build_regex(pattern, case_sensitive) {
-            data.items
-                .retain(|item| item.description.as_ref().map_or(false, |d| re.is_match(d)));
+        // filter_title: include items matching title regex
+        if let Some(ref pattern) = params.filter_title {
+            if let Some(re) = build_regex(pattern, case_sensitive) {
+                data.items.retain(|item| re.is_match(&item.title));
+            }
         }
-    }
 
-    // filterout_description: exclude items matching description regex
-    if let Some(ref pattern) = params.filterout_description {
-        if let Some(re) = build_regex(pattern, case_sensitive) {
-            data.items
-                .retain(|item| item.description.as_ref().map_or(true, |d| !re.is_match(d)));
+        // filterout_title: exclude items matching title regex
+        if let Some(ref pattern) = params.filterout_title {
+            if let Some(re) = build_regex(pattern, case_sensitive) {
+                data.items.retain(|item| !re.is_match(&item.title));
+            }
         }
-    }
 
-    // filter: include items matching ANY of title/description/author/category
-    if let Some(ref pattern) = params.filter {
-        if let Some(re) = build_regex(pattern, case_sensitive) {
-            data.items.retain(|item| {
-                re.is_match(&item.title)
-                    || item.description.as_ref().map_or(false, |d| re.is_match(d))
-                    || item.author.as_ref().map_or(false, |a| re.is_match(a))
-                    || item.category.iter().any(|c| re.is_match(c))
-            });
+        // filter_description: include items matching description regex
+        if let Some(ref pattern) = params.filter_description {
+            if let Some(re) = build_regex(pattern, case_sensitive) {
+                data.items
+                    .retain(|item| item.description.as_ref().map_or(false, |d| re.is_match(d)));
+            }
         }
-    }
 
-    // filterout: exclude items matching ANY of title/description/author/category
-    if let Some(ref pattern) = params.filterout {
-        if let Some(re) = build_regex(pattern, case_sensitive) {
-            data.items.retain(|item| {
-                !(re.is_match(&item.title)
-                    || item.description.as_ref().map_or(false, |d| re.is_match(d))
-                    || item.author.as_ref().map_or(false, |a| re.is_match(a))
-                    || item.category.iter().any(|c| re.is_match(c)))
-            });
+        // filterout_description: exclude items matching description regex
+        if let Some(ref pattern) = params.filterout_description {
+            if let Some(re) = build_regex(pattern, case_sensitive) {
+                data.items
+                    .retain(|item| item.description.as_ref().map_or(true, |d| !re.is_match(d)));
+            }
         }
     }
 
@@ -355,5 +360,21 @@ mod tests {
         let params = FilterParams::from_query(None);
         assert!(params.filter.is_none());
         assert!(params.limit.is_none());
+    }
+
+    #[test]
+    fn unified_filter_overrides_individual() {
+        let mut data = sample_data();
+        // filter=food should match "Cooking Tips" (category "food")
+        // filter_title=Rust should be IGNORED because unified filter is set
+        let params = FilterParams {
+            filter: Some("food".into()),
+            filter_title: Some("Rust".into()),
+            ..Default::default()
+        };
+        apply_filters(&mut data, &params);
+        // Only "Cooking Tips" matches unified filter "food"
+        assert_eq!(data.items.len(), 1);
+        assert_eq!(data.items[0].title, "Cooking Tips");
     }
 }

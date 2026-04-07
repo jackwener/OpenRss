@@ -147,8 +147,9 @@ async fn parameter_limit() {
 #[tokio::test]
 async fn parameter_filter_title() {
     let s = server(&test_config());
+    // Use anchored regex to match exactly "Test Item 1" (not "Test Item 10" etc.)
     let res: axum_test::TestResponse = s
-        .get("/test/example?format=json&filter_title=Item%201")
+        .get("/test/example?format=json&filter_title=^Test%20Item%201$")
         .await;
     res.assert_status_ok();
 

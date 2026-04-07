@@ -67,7 +67,7 @@ pub async fn header_middleware(
 fn compute_etag(data: &crate::data::Data) -> String {
     use xxhash_rust::xxh64::xxh64;
 
-    // Hash title + items (excluding updated/lastBuildDate which change)
+    // Hash title + all item fields (excluding updated/lastBuildDate which change per-request)
     let mut input = data.title.clone();
     for item in &data.items {
         input.push_str(&item.title);
@@ -79,6 +79,12 @@ fn compute_etag(data: &crate::data::Data) -> String {
         }
         if let Some(ref guid) = item.guid {
             input.push_str(guid);
+        }
+        if let Some(ref author) = item.author {
+            input.push_str(author);
+        }
+        for cat in &item.category {
+            input.push_str(cat);
         }
     }
 
@@ -111,6 +117,36 @@ mod tests {
         d1.items.push(DataItem::new("Item"));
         let mut d2 = Data::new("Feed B");
         d2.items.push(DataItem::new("Item"));
+        assert_ne!(compute_etag(&d1), compute_etag(&d2));
+    }
+
+    #[test]
+    fn etag_changes_with_author() {
+        let mut d1 = Data::new("Feed");
+        let mut item1 = DataItem::new("Item");
+        item1.author = Some("Alice".into());
+        d1.items.push(item1);
+
+        let mut d2 = Data::new("Feed");
+        let mut item2 = DataItem::new("Item");
+        item2.author = Some("Bob".into());
+        d2.items.push(item2);
+
+        assert_ne!(compute_etag(&d1), compute_etag(&d2));
+    }
+
+    #[test]
+    fn etag_changes_with_category() {
+        let mut d1 = Data::new("Feed");
+        let mut item1 = DataItem::new("Item");
+        item1.category = vec!["tech".into()];
+        d1.items.push(item1);
+
+        let mut d2 = Data::new("Feed");
+        let mut item2 = DataItem::new("Item");
+        item2.category = vec!["food".into()];
+        d2.items.push(item2);
+
         assert_ne!(compute_etag(&d1), compute_etag(&d2));
     }
 
