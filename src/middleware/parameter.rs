@@ -2,6 +2,7 @@ use chrono::Utc;
 use regex::Regex;
 
 use crate::data::Data;
+use super::sanitize;
 
 /// Query parameters that control item filtering, sorting, and limiting.
 #[derive(Debug, Default)]
@@ -15,6 +16,7 @@ pub struct FilterParams {
     pub filter_case_sensitive: Option<bool>,
     pub limit: Option<usize>,
     pub filter_time: Option<i64>,
+    pub brief: Option<usize>,
 }
 
 impl FilterParams {
@@ -45,6 +47,7 @@ impl FilterParams {
                 }
                 "limit" => params.limit = val_decoded.parse().ok(),
                 "filter_time" => params.filter_time = val_decoded.parse().ok(),
+                "brief" => params.brief = val_decoded.parse().ok(),
                 _ => {}
             }
         }
@@ -120,6 +123,24 @@ pub fn apply_filters(data: &mut Data, params: &FilterParams) {
             if let Some(re) = build_regex(pattern, case_sensitive) {
                 data.items
                     .retain(|item| item.description.as_ref().map_or(true, |d| !re.is_match(d)));
+            }
+        }
+    }
+
+    // HTML sanitization — always applied to descriptions
+    for item in &mut data.items {
+        if let Some(ref mut desc) = item.description {
+            *desc = sanitize::sanitize_html(desc);
+        }
+    }
+
+    // brief: truncate description to N chars (min 100)
+    if let Some(n) = params.brief {
+        if n >= 100 {
+            for item in &mut data.items {
+                if let Some(ref desc) = item.description {
+                    item.description = Some(sanitize::brief(desc, n));
+                }
             }
         }
     }
@@ -345,7 +366,7 @@ mod tests {
     #[test]
     fn from_query_parses_all_params() {
         let params = FilterParams::from_query(Some(
-            "filter=test&filterout=spam&filter_title=rust&limit=10&filter_time=3600&filter_case_sensitive=false",
+            "filter=test&filterout=spam&filter_title=rust&limit=10&filter_time=3600&filter_case_sensitive=false&brief=200",
         ));
         assert_eq!(params.filter.as_deref(), Some("test"));
         assert_eq!(params.filterout.as_deref(), Some("spam"));
@@ -353,6 +374,7 @@ mod tests {
         assert_eq!(params.limit, Some(10));
         assert_eq!(params.filter_time, Some(3600));
         assert_eq!(params.filter_case_sensitive, Some(false));
+        assert_eq!(params.brief, Some(200));
     }
 
     #[test]
@@ -360,6 +382,70 @@ mod tests {
         let params = FilterParams::from_query(None);
         assert!(params.filter.is_none());
         assert!(params.limit.is_none());
+    }
+
+    #[test]
+    fn brief_truncates_description() {
+        let mut data = Data::new("Test");
+        let mut item = DataItem::new("Item");
+        item.description = Some("<p>This is a very long description that contains lots of text and should be truncated by the brief parameter</p>".into());
+        data.items.push(item);
+
+        let params = FilterParams {
+            brief: Some(100),
+            ..Default::default()
+        };
+        apply_filters(&mut data, &params);
+        let desc = data.items[0].description.as_ref().unwrap();
+        assert!(desc.ends_with("..."));
+        // Plain text (tags stripped) + "..." should be around 103 chars
+        assert!(desc.len() <= 110);
+    }
+
+    #[test]
+    fn brief_ignored_when_under_100() {
+        let mut data = Data::new("Test");
+        let mut item = DataItem::new("Item");
+        item.description = Some("<p>Some description here</p>".into());
+        data.items.push(item);
+
+        let params = FilterParams {
+            brief: Some(50), // Under 100, should be ignored
+            ..Default::default()
+        };
+        apply_filters(&mut data, &params);
+        let desc = data.items[0].description.as_ref().unwrap();
+        // HTML sanitization still applies but brief is skipped
+        assert!(desc.contains("Some description here"));
+    }
+
+    #[test]
+    fn sanitizes_script_in_description() {
+        let mut data = Data::new("Test");
+        let mut item = DataItem::new("Item");
+        item.description = Some(r#"<p>Safe</p><script>alert("xss")</script>"#.into());
+        data.items.push(item);
+
+        let params = FilterParams::default();
+        apply_filters(&mut data, &params);
+        let desc = data.items[0].description.as_ref().unwrap();
+        assert!(!desc.contains("script"));
+        assert!(!desc.contains("alert"));
+        assert!(desc.contains("<p>Safe</p>"));
+    }
+
+    #[test]
+    fn sanitizes_event_handlers() {
+        let mut data = Data::new("Test");
+        let mut item = DataItem::new("Item");
+        item.description = Some(r#"<img src="a.jpg" onerror="alert(1)">"#.into());
+        data.items.push(item);
+
+        let params = FilterParams::default();
+        apply_filters(&mut data, &params);
+        let desc = data.items[0].description.as_ref().unwrap();
+        assert!(!desc.contains("onerror"));
+        assert!(desc.contains("src=\"a.jpg\""));
     }
 
     #[test]
