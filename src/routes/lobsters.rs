@@ -86,7 +86,7 @@ fn lobsters_handler(
             .collect();
 
         let mut data = Data::new(category_title(category));
-        data.link = Some("https://lobste.rs".into());
+        data.link = Some(base.clone());
         data.description = Some(format!("{} via OpenRss", category_title(category)));
         data.language = Some("en".into());
         data.items = items;
