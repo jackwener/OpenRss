@@ -16,6 +16,19 @@ pub struct AppState {
     pub config: Arc<crate::config::Config>,
     pub cache: Arc<dyn crate::cache::CacheBackend>,
     pub http: crate::http::client::HttpClient,
+    /// Override API base URLs (for testing with wiremock).
+    /// Key: identifier (e.g. "hackernews"), Value: base URL.
+    pub base_urls: HashMap<String, String>,
+}
+
+impl AppState {
+    /// Get the API base URL for a service, falling back to the default.
+    pub fn base_url(&self, service: &str, default: &str) -> String {
+        self.base_urls
+            .get(service)
+            .cloned()
+            .unwrap_or_else(|| default.to_string())
+    }
 }
 
 /// Type alias for route handler functions.
@@ -108,6 +121,32 @@ mod tests {
             config: Arc::new(config),
             cache,
             http,
+            base_urls: HashMap::new(),
         };
+    }
+
+    #[test]
+    fn base_url_returns_override() {
+        let config = crate::config::Config {
+            port: 0,
+            cache_expire: 300,
+            cache_type: crate::config::CacheType::Memory,
+            redis_url: None,
+            access_key: None,
+            request_timeout: 30,
+            item_limit: 50,
+        };
+        let cache = Arc::new(crate::cache::memory::MemoryCache::new(100, 300));
+        let http = crate::http::client::HttpClient::new(&config);
+        let mut urls = HashMap::new();
+        urls.insert("hackernews".to_string(), "http://localhost:9999/v0".to_string());
+        let state = AppState {
+            config: Arc::new(config),
+            cache,
+            http,
+            base_urls: urls,
+        };
+        assert_eq!(state.base_url("hackernews", "https://default.com"), "http://localhost:9999/v0");
+        assert_eq!(state.base_url("other", "https://default.com"), "https://default.com");
     }
 }

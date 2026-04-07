@@ -85,9 +85,10 @@ fn hn_handler(
             .ok_or_else(|| AppError::RouteNotFound(format!("hackernews/{category}")))?;
 
         let limit = state.config.item_limit;
+        let base = state.base_url("hackernews", HN_API_BASE);
 
         // Fetch story IDs
-        let ids_url = format!("{HN_API_BASE}/{endpoint}.json");
+        let ids_url = format!("{base}/{endpoint}.json");
         let ids: Vec<u64> = state.http.get_json(&ids_url).await?;
 
         // Take only `limit` IDs
@@ -97,8 +98,9 @@ fn hn_handler(
         let items: Vec<DataItem> = stream::iter(ids)
             .map(|id| {
                 let http = &state.http;
+                let base = &base;
                 async move {
-                    let url = format!("{HN_API_BASE}/item/{id}.json");
+                    let url = format!("{base}/item/{id}.json");
                     let hn_item: Result<HnItem, _> = http.get_json(&url).await;
                     hn_item.ok().and_then(|item| map_hn_item(&item))
                 }

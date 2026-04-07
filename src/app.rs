@@ -1,4 +1,5 @@
 use axum::{middleware, routing::get, Router};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::cache::memory::MemoryCache;
@@ -10,15 +11,23 @@ use crate::routes;
 
 /// Build the Axum application with all routes and middleware.
 pub fn build_app(config: &Config) -> Router {
+    build_app_with_overrides(config, HttpClient::new(config), HashMap::new())
+}
+
+/// Build app with custom HttpClient and base URL overrides (for testing).
+pub fn build_app_with_overrides(
+    config: &Config,
+    http_client: HttpClient,
+    base_urls: HashMap<String, String>,
+) -> Router {
     let cache_backend = Arc::new(MemoryCache::new(1000, config.cache_expire));
     let config = Arc::new(config.clone());
-
-    let http_client = HttpClient::new(&config);
 
     let app_state = Arc::new(AppState {
         config: config.clone(),
         cache: cache_backend.clone(),
         http: http_client,
+        base_urls,
     });
 
     let cache_state = Arc::new(CacheState {
@@ -33,6 +42,7 @@ pub fn build_app(config: &Config) -> Router {
 
     let app = registry::register_routes(app, routes::test::routes());
     let app = registry::register_routes(app, routes::hackernews::routes());
+    let app = registry::register_routes(app, routes::lobsters::routes());
 
     // Middleware stack — last .layer() = outermost (runs first for request).
     //
