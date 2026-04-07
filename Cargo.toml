@@ -1,0 +1,57 @@
+[package]
+name = "openrss"
+version = "0.1.0"
+edition = "2021"
+description = "Make any website your RSS feed. A Rust rewrite of RSSHub."
+license = "MIT"
+repository = "https://github.com/jackwener/OpenRss"
+
+[dependencies]
+# Web framework
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "cookies"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# XML
+quick-xml = { version = "0.37", features = ["serialize"] }
+
+# HTML parsing
+scraper = "0.22"
+
+# Cache
+moka = { version = "0.12", features = ["future"] }
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Config
+dotenvy = "0.15"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Hashing (cache keys, ETag)
+xxhash-rust = { version = "0.8", features = ["xxh64"] }
+
+# Regex (parameter middleware filtering)
+regex = "1"
+
+# Error handling
+thiserror = "2"
+
+# UUID (guid generation)
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+axum-test = "16"
+wiremock = "0.6"
+pretty_assertions = "1"
