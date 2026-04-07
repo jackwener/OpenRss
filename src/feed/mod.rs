@@ -1,6 +1,7 @@
 pub mod atom;
 pub mod json;
 pub mod rss;
+pub mod xml_utils;
 
 /// Output format for feed rendering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -24,7 +25,7 @@ impl FeedFormat {
         match self {
             FeedFormat::Rss => "application/rss+xml; charset=utf-8",
             FeedFormat::Atom => "application/atom+xml; charset=utf-8",
-            FeedFormat::Json => "application/json; charset=utf-8",
+            FeedFormat::Json => "application/feed+json; charset=utf-8",
         }
     }
 }
@@ -60,6 +61,6 @@ mod tests {
     fn content_types() {
         assert!(FeedFormat::Rss.content_type().contains("rss+xml"));
         assert!(FeedFormat::Atom.content_type().contains("atom+xml"));
-        assert!(FeedFormat::Json.content_type().contains("application/json"));
+        assert!(FeedFormat::Json.content_type().contains("application/feed+json"));
     }
 }

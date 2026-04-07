@@ -24,6 +24,24 @@ pub enum AppError {
     Internal(String),
 }
 
+impl From<std::io::Error> for AppError {
+    fn from(e: std::io::Error) -> Self {
+        AppError::Render(e.to_string())
+    }
+}
+
+impl From<quick_xml::Error> for AppError {
+    fn from(e: quick_xml::Error) -> Self {
+        AppError::Render(e.to_string())
+    }
+}
+
+impl From<quick_xml::DeError> for AppError {
+    fn from(e: quick_xml::DeError) -> Self {
+        AppError::Render(e.to_string())
+    }
+}
+
 impl axum::response::IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
         use axum::http::StatusCode;

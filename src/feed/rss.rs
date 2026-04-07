@@ -2,6 +2,7 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
 use std::io::Cursor;
 
+use super::xml_utils::{write_cdata_element, write_text_element};
 use crate::data::Data;
 use crate::error::AppError;
 
@@ -10,24 +11,19 @@ pub fn render(data: &Data) -> Result<String, AppError> {
     let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
     // XML declaration
-    writer
-        .write_event(Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)))
-        .map_err(|e| AppError::Render(e.to_string()))?;
+    writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)))?;
 
     // <rss version="2.0">
     let mut rss = BytesStart::new("rss");
     rss.push_attribute(("version", "2.0"));
     rss.push_attribute(("xmlns:atom", "http://www.w3.org/2005/Atom"));
-    writer
-        .write_event(Event::Start(rss))
-        .map_err(|e| AppError::Render(e.to_string()))?;
+    writer.write_event(Event::Start(rss))?;
 
     // <channel>
-    writer
-        .write_event(Event::Start(BytesStart::new("channel")))
-        .map_err(|e| AppError::Render(e.to_string()))?;
+    writer.write_event(Event::Start(BytesStart::new("channel")))?;
 
     write_text_element(&mut writer, "title", &data.title)?;
+    write_text_element(&mut writer, "generator", "OpenRss")?;
 
     if let Some(ref link) = data.link {
         write_text_element(&mut writer, "link", link)?;
@@ -36,9 +32,7 @@ pub fn render(data: &Data) -> Result<String, AppError> {
         atom_link.push_attribute(("href", link.as_str()));
         atom_link.push_attribute(("rel", "self"));
         atom_link.push_attribute(("type", "application/rss+xml"));
-        writer
-            .write_event(Event::Empty(atom_link))
-            .map_err(|e| AppError::Render(e.to_string()))?;
+        writer.write_event(Event::Empty(atom_link))?;
     }
 
     if let Some(ref desc) = data.description {
@@ -52,17 +46,13 @@ pub fn render(data: &Data) -> Result<String, AppError> {
     }
 
     if let Some(ref image) = data.image {
-        writer
-            .write_event(Event::Start(BytesStart::new("image")))
-            .map_err(|e| AppError::Render(e.to_string()))?;
+        writer.write_event(Event::Start(BytesStart::new("image")))?;
         write_text_element(&mut writer, "url", image)?;
         write_text_element(&mut writer, "title", &data.title)?;
         if let Some(ref link) = data.link {
             write_text_element(&mut writer, "link", link)?;
         }
-        writer
-            .write_event(Event::End(BytesEnd::new("image")))
-            .map_err(|e| AppError::Render(e.to_string()))?;
+        writer.write_event(Event::End(BytesEnd::new("image")))?;
     }
 
     if let Some(ttl) = data.ttl {
@@ -75,9 +65,7 @@ pub fn render(data: &Data) -> Result<String, AppError> {
 
     // Items
     for item in &data.items {
-        writer
-            .write_event(Event::Start(BytesStart::new("item")))
-            .map_err(|e| AppError::Render(e.to_string()))?;
+        writer.write_event(Event::Start(BytesStart::new("item")))?;
 
         write_text_element(&mut writer, "title", &item.title)?;
 
@@ -104,15 +92,9 @@ pub fn render(data: &Data) -> Result<String, AppError> {
         if let Some(ref guid) = item.guid {
             let mut guid_el = BytesStart::new("guid");
             guid_el.push_attribute(("isPermaLink", "false"));
-            writer
-                .write_event(Event::Start(guid_el))
-                .map_err(|e| AppError::Render(e.to_string()))?;
-            writer
-                .write_event(Event::Text(BytesText::new(guid)))
-                .map_err(|e| AppError::Render(e.to_string()))?;
-            writer
-                .write_event(Event::End(BytesEnd::new("guid")))
-                .map_err(|e| AppError::Render(e.to_string()))?;
+            writer.write_event(Event::Start(guid_el))?;
+            writer.write_event(Event::Text(BytesText::new(guid)))?;
+            writer.write_event(Event::End(BytesEnd::new("guid")))?;
         }
 
         if let Some(ref url) = item.enclosure_url {
@@ -124,62 +106,20 @@ pub fn render(data: &Data) -> Result<String, AppError> {
             if let Some(len) = item.enclosure_length {
                 enc.push_attribute(("length", len.to_string().as_str()));
             }
-            writer
-                .write_event(Event::Empty(enc))
-                .map_err(|e| AppError::Render(e.to_string()))?;
+            writer.write_event(Event::Empty(enc))?;
         }
 
-        writer
-            .write_event(Event::End(BytesEnd::new("item")))
-            .map_err(|e| AppError::Render(e.to_string()))?;
+        writer.write_event(Event::End(BytesEnd::new("item")))?;
     }
 
     // </channel>
-    writer
-        .write_event(Event::End(BytesEnd::new("channel")))
-        .map_err(|e| AppError::Render(e.to_string()))?;
+    writer.write_event(Event::End(BytesEnd::new("channel")))?;
 
     // </rss>
-    writer
-        .write_event(Event::End(BytesEnd::new("rss")))
-        .map_err(|e| AppError::Render(e.to_string()))?;
+    writer.write_event(Event::End(BytesEnd::new("rss")))?;
 
     let result = writer.into_inner().into_inner();
     String::from_utf8(result).map_err(|e| AppError::Render(e.to_string()))
-}
-
-fn write_text_element(
-    writer: &mut Writer<Cursor<Vec<u8>>>,
-    tag: &str,
-    text: &str,
-) -> Result<(), AppError> {
-    writer
-        .write_event(Event::Start(BytesStart::new(tag)))
-        .map_err(|e| AppError::Render(e.to_string()))?;
-    writer
-        .write_event(Event::Text(BytesText::new(text)))
-        .map_err(|e| AppError::Render(e.to_string()))?;
-    writer
-        .write_event(Event::End(BytesEnd::new(tag)))
-        .map_err(|e| AppError::Render(e.to_string()))?;
-    Ok(())
-}
-
-fn write_cdata_element(
-    writer: &mut Writer<Cursor<Vec<u8>>>,
-    tag: &str,
-    content: &str,
-) -> Result<(), AppError> {
-    writer
-        .write_event(Event::Start(BytesStart::new(tag)))
-        .map_err(|e| AppError::Render(e.to_string()))?;
-    writer
-        .write_event(Event::CData(quick_xml::events::BytesCData::new(content)))
-        .map_err(|e| AppError::Render(e.to_string()))?;
-    writer
-        .write_event(Event::End(BytesEnd::new(tag)))
-        .map_err(|e| AppError::Render(e.to_string()))?;
-    Ok(())
 }
 
 #[cfg(test)]
@@ -212,8 +152,12 @@ mod tests {
         assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"utf-8\"?>"));
         assert!(xml.contains("<rss version=\"2.0\""));
         assert!(xml.contains("</rss>"));
-        // Verify it parses back
-        quick_xml::Reader::from_str(&xml);
+    }
+
+    #[test]
+    fn rss_includes_generator() {
+        let xml = render(&sample_data()).unwrap();
+        assert!(xml.contains("<generator>OpenRss</generator>"));
     }
 
     #[test]
@@ -238,7 +182,6 @@ mod tests {
     #[test]
     fn rss_includes_pubdate() {
         let xml = render(&sample_data()).unwrap();
-        // RFC 2822 date format
         assert!(xml.contains("<pubDate>"));
         assert!(xml.contains("2025"));
     }
@@ -285,7 +228,6 @@ mod tests {
         data.items.push(DataItem::new("Item <1> & \"2\""));
 
         let xml = render(&data).unwrap();
-        // Title text should be XML-escaped
         assert!(xml.contains("&lt;special&gt;"));
         assert!(xml.contains("&amp;"));
     }
