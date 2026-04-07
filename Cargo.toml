@@ -51,7 +51,13 @@ thiserror = "2"
 # UUID (guid generation)
 uuid = { version = "1", features = ["v4"] }
 
+# MD5 (access control code verification)
+md-5 = "0.10"
+
+# URL encoding (query param parsing)
+urlencoding = "2"
+
 [dev-dependencies]
-axum-test = "16"
+axum-test = "20"
 wiremock = "0.6"
 pretty_assertions = "1"

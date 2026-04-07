@@ -1,11 +1,4 @@
-mod app;
-mod cache;
-mod config;
-mod data;
-mod error;
-mod feed;
-
-use config::Config;
+use openrss::config::Config;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -15,7 +8,7 @@ async fn main() {
         .init();
 
     let config = Config::from_env();
-    let app = app::build_app(&config);
+    let app = openrss::app::build_app(&config);
 
     let addr = format!("0.0.0.0:{}", config.port);
     tracing::info!("OpenRss listening on {}", addr);
