@@ -137,6 +137,7 @@ async fn hn_retry_on_server_error() {
     Mock::given(method("GET"))
         .and(path("/v0/topstories.json"))
         .respond_with(ResponseTemplate::new(503))
+        .expect(4) // 1 original + 3 retries
         .mount(&server)
         .await;
 
@@ -146,6 +147,7 @@ async fn hn_retry_on_server_error() {
         .await;
 
     assert!(result.is_err());
+    // Mock expectation (expect(4)) is verified on MockServer drop
 }
 
 #[tokio::test]

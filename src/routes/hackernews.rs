@@ -30,6 +30,10 @@ struct HnItem {
     descendants: Option<i64>,
     #[serde(default)]
     time: Option<i64>,
+    #[serde(default)]
+    dead: Option<bool>,
+    #[serde(default)]
+    deleted: Option<bool>,
 }
 
 pub fn routes() -> Vec<RouteDefinition> {
@@ -114,9 +118,13 @@ fn hn_handler(
     })
 }
 
-/// Convert an HN API item to a DataItem.
+/// Convert an HN API item to a DataItem. Returns None for dead/deleted items.
 fn map_hn_item(item: &HnItem) -> Option<DataItem> {
-    let title = item.title.as_deref().unwrap_or("[untitled]");
+    if item.dead.unwrap_or(false) || item.deleted.unwrap_or(false) {
+        return None;
+    }
+
+    let title = item.title.as_deref()?;
     let mut data_item = DataItem::new(title);
 
     // Link: prefer external URL, fall back to HN item page
@@ -135,7 +143,7 @@ fn map_hn_item(item: &HnItem) -> Option<DataItem> {
         ));
     }
     if !desc_parts.is_empty() {
-        data_item.description = Some(desc_parts.join("\n"));
+        data_item.description = Some(desc_parts.join("<br/><br/>"));
     }
 
     data_item.guid = Some(format!("hn-{}", item.id));
@@ -174,6 +182,8 @@ mod tests {
             score: Some(42),
             descendants: Some(10),
             time: Some(1700000000),
+            dead: None,
+            deleted: None,
         };
         let result = map_hn_item(&item).unwrap();
         assert_eq!(result.title, "Show HN: My Project");
@@ -185,6 +195,8 @@ mod tests {
         assert!(desc.contains("Check out my project"));
         assert!(desc.contains("Score: 42"));
         assert!(desc.contains("Comments: 10"));
+        // Text and score separated by <br/><br/>, not \n
+        assert!(desc.contains("<br/><br/>"));
     }
 
     #[test]
@@ -198,6 +210,8 @@ mod tests {
             score: None,
             descendants: None,
             time: None,
+            dead: None,
+            deleted: None,
         };
         let result = map_hn_item(&item).unwrap();
         assert_eq!(
@@ -207,7 +221,7 @@ mod tests {
     }
 
     #[test]
-    fn map_hn_item_no_title() {
+    fn map_hn_item_no_title_returns_none() {
         let item = HnItem {
             id: 1,
             title: None,
@@ -217,9 +231,44 @@ mod tests {
             score: None,
             descendants: None,
             time: None,
+            dead: None,
+            deleted: None,
         };
-        let result = map_hn_item(&item).unwrap();
-        assert_eq!(result.title, "[untitled]");
+        assert!(map_hn_item(&item).is_none());
+    }
+
+    #[test]
+    fn map_hn_item_dead_returns_none() {
+        let item = HnItem {
+            id: 1,
+            title: Some("Dead Story".into()),
+            url: None,
+            text: None,
+            by: None,
+            score: None,
+            descendants: None,
+            time: None,
+            dead: Some(true),
+            deleted: None,
+        };
+        assert!(map_hn_item(&item).is_none());
+    }
+
+    #[test]
+    fn map_hn_item_deleted_returns_none() {
+        let item = HnItem {
+            id: 1,
+            title: Some("Deleted Story".into()),
+            url: None,
+            text: None,
+            by: None,
+            score: None,
+            descendants: None,
+            time: None,
+            dead: None,
+            deleted: Some(true),
+        };
+        assert!(map_hn_item(&item).is_none());
     }
 
     #[test]
