@@ -1,4 +1,5 @@
 use scraper::Html;
+use std::sync::OnceLock;
 
 /// Sanitize HTML content: remove scripts, event handlers, fix lazyload, add referrerpolicy.
 pub fn sanitize_html(html: &str) -> String {
@@ -43,72 +44,103 @@ pub fn brief(html: &str, max_chars: usize) -> String {
     format!("{truncated}...")
 }
 
-fn remove_script_tags(html: &str) -> String {
-    // Use regex to remove <script>...</script> including content
-    let re = regex::RegexBuilder::new(r"<script\b[^>]*>[\s\S]*?</script>")
+// Cached regex patterns — compiled once, reused across calls.
+
+fn re_script() -> &'static regex::Regex {
+    static RE: OnceLock<regex::Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        regex::RegexBuilder::new(r"<script\b[^>]*>[\s\S]*?</script>")
+            .case_insensitive(true)
+            .build()
+            .unwrap()
+    })
+}
+
+fn re_event_attrs() -> &'static regex::Regex {
+    static RE: OnceLock<regex::Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        regex::RegexBuilder::new(r#"\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|\S+)"#)
+            .case_insensitive(true)
+            .build()
+            .unwrap()
+    })
+}
+
+fn re_lazyload() -> &'static regex::Regex {
+    static RE: OnceLock<regex::Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        regex::RegexBuilder::new(
+            r#"(<img\b[^>]*?)(?:\s+src\s*=\s*(?:"[^"]*"|'[^']*'))?\s+(data-(?:src|original)\s*=\s*(?:"[^"]*"|'[^']*'))"#,
+        )
         .case_insensitive(true)
         .build()
-        .unwrap();
-    re.replace_all(html, "").to_string()
+        .unwrap()
+    })
+}
+
+fn re_lazyload_dq() -> &'static regex::Regex {
+    static RE: OnceLock<regex::Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(r#"data-(?:src|original)\s*=\s*"([^"]*)""#).unwrap()
+    })
+}
+
+fn re_lazyload_sq() -> &'static regex::Regex {
+    static RE: OnceLock<regex::Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(r#"data-(?:src|original)\s*=\s*'([^']*)'"#).unwrap()
+    })
+}
+
+fn re_referrer() -> &'static regex::Regex {
+    static RE: OnceLock<regex::Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        regex::RegexBuilder::new(r"<(img|iframe)\b([^>]*?)(/?)>")
+            .case_insensitive(true)
+            .build()
+            .unwrap()
+    })
+}
+
+fn remove_script_tags(html: &str) -> String {
+    re_script().replace_all(html, "").to_string()
 }
 
 fn remove_event_attributes(html: &str) -> String {
-    // Remove on* attributes like onclick="...", onerror='...', onload=...
-    let re = regex::RegexBuilder::new(r#"\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|\S+)"#)
-        .case_insensitive(true)
-        .build()
-        .unwrap();
-    re.replace_all(html, "").to_string()
+    re_event_attrs().replace_all(html, "").to_string()
 }
 
 fn fix_lazyload_images(html: &str) -> String {
-    // Replace data-src="..." with src="..." on img tags that have no src or empty src
-    let re = regex::RegexBuilder::new(
-        r#"(<img\b[^>]*?)(?:\s+src\s*=\s*(?:"[^"]*"|'[^']*'))?\s+(data-(?:src|original)\s*=\s*(?:"[^"]*"|'[^']*'))"#,
-    )
-    .case_insensitive(true)
-    .build()
-    .unwrap();
-
-    re.replace_all(html, |caps: &regex::Captures| {
-        let prefix = &caps[1];
-        let data_attr = &caps[2];
-        // Extract the URL from data-src="url" or data-original="url"
-        let url_re = regex::Regex::new(r#"data-(?:src|original)\s*=\s*"([^"]*)""#).unwrap();
-        if let Some(url_caps) = url_re.captures(data_attr) {
-            let url = &url_caps[1];
-            format!("{prefix} src=\"{url}\"")
-        } else {
-            let url_re = regex::Regex::new(r#"data-(?:src|original)\s*=\s*'([^']*)'"#).unwrap();
-            if let Some(url_caps) = url_re.captures(data_attr) {
+    re_lazyload()
+        .replace_all(html, |caps: &regex::Captures| {
+            let prefix = &caps[1];
+            let data_attr = &caps[2];
+            if let Some(url_caps) = re_lazyload_dq().captures(data_attr) {
+                let url = &url_caps[1];
+                format!("{prefix} src=\"{url}\"")
+            } else if let Some(url_caps) = re_lazyload_sq().captures(data_attr) {
                 let url = &url_caps[1];
                 format!("{prefix} src='{url}'")
             } else {
                 caps[0].to_string()
             }
-        }
-    })
-    .to_string()
+        })
+        .to_string()
 }
 
 fn add_referrer_policy(html: &str) -> String {
-    // Add referrerpolicy="no-referrer" to <img> and <iframe> that don't already have it
-    let re = regex::RegexBuilder::new(r"<(img|iframe)\b([^>]*?)(/?)>")
-        .case_insensitive(true)
-        .build()
-        .unwrap();
-
-    re.replace_all(html, |caps: &regex::Captures| {
-        let tag = &caps[1];
-        let attrs = &caps[2];
-        let close = &caps[3];
-        if attrs.contains("referrerpolicy") {
-            caps[0].to_string()
-        } else {
-            format!("<{tag}{attrs} referrerpolicy=\"no-referrer\"{close}>")
-        }
-    })
-    .to_string()
+    re_referrer()
+        .replace_all(html, |caps: &regex::Captures| {
+            let tag = &caps[1];
+            let attrs = &caps[2];
+            let close = &caps[3];
+            if attrs.contains("referrerpolicy") {
+                caps[0].to_string()
+            } else {
+                format!("<{tag}{attrs} referrerpolicy=\"no-referrer\"{close}>")
+            }
+        })
+        .to_string()
 }
 
 #[cfg(test)]
@@ -177,7 +209,6 @@ mod tests {
     fn does_not_duplicate_referrer_policy() {
         let html = r#"<img src="a.jpg" referrerpolicy="origin">"#;
         let result = sanitize_html(html);
-        // Should keep existing policy, not add another
         assert!(result.contains("referrerpolicy=\"origin\""));
         assert_eq!(result.matches("referrerpolicy").count(), 1);
     }
